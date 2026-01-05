@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Core Elements ---
     const generateBtn = document.getElementById('generateBtn');
     const downloadBtn = document.getElementById('downloadBtn');
     const promptInput = document.getElementById('prompt');
@@ -6,11 +7,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const heightInput = document.getElementById('height');
     const seedInput = document.getElementById('seed');
     const imageContainer = document.getElementById('imageContainer');
+    
+    // UI State Elements (Loading text vs Spinner)
     const btnText = document.querySelector('.btn-text');
     const btnLoader = document.querySelector('.btn-loader');
 
+    // --- NEW: The Quality Selector ---
+    // We grab this element to see which model user wants (Turbo, Flux, etc.)
+    const pollinationsModelSelect = document.getElementById('pollinationsModel');
+
+    // --- Event Listeners ---
     generateBtn.addEventListener('click', generateImage);
     downloadBtn.addEventListener('click', downloadImage);
+
+    // Allow "Enter" key in textarea to generate
     promptInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -19,60 +29,69 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function generateImage() {
+        // 1. Get User Inputs
         const prompt = promptInput.value.trim();
         
         if (!prompt) {
-            alert('Please enter a prompt to generate an image');
+            alert('Please describe the image you want to generate!');
             return;
         }
 
-        // Get parameters
-        const width = parseInt(widthInput.value) || 1024;
-        const height = parseInt(heightInput.value) || 1024;
-        const seed = seedInput.value ? parseInt(seedInput.value) : Math.floor(Math.random() * 1000000);
+        // 2. Get Image Settings
+        const width = widthInput.value || 1024;
+        const height = heightInput.value || 1024;
+        // If user enters a seed, use it. Otherwise, random number.
+        const seed = seedInput.value ? seedInput.value : Math.floor(Math.random() * 1000000);
+        
+        // 3. Get Selected Model (Quality)
+        // This reads the value from your new HTML dropdown
+        const modelQuality = pollinationsModelSelect.value;
 
-        // Show loading state
+        // 4. Show Loading State
         generateBtn.disabled = true;
         btnText.style.display = 'none';
         btnLoader.style.display = 'inline';
-        imageContainer.innerHTML = '<div class="loader"></div><p style="margin-top: 10px;">Generating your image...</p>';
+        imageContainer.innerHTML = '<p style="text-align:center; color:#888;">Generating AI art... please wait.</p>';
 
         try {
-            // Construct Pollinations.ai URL
+            // 5. Construct the Pollinations URL
+            // We encode the prompt so spaces and symbols work in the URL
             const encodedPrompt = encodeURIComponent(prompt);
-            const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${seed}&nologo=true`;
             
-            // Create new image
+            // We add '&model=' to the URL to tell Pollinations which engine to use
+            const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${seed}&model=${modelQuality}&nologo=true`;
+            
+            // 6. Load the Image
             const img = new Image();
-            img.crossOrigin = 'anonymous'; // Allow cross-origin for download
+            img.crossOrigin = 'anonymous'; // Required for the download button to work
             img.alt = prompt;
             
             img.onload = () => {
+                // Success: Show image
                 imageContainer.innerHTML = '';
                 imageContainer.appendChild(img);
-                downloadBtn.style.display = 'block';
+                downloadBtn.style.display = 'block'; // Show download button
                 
-                // Reset button state
+                // Reset Button
                 generateBtn.disabled = false;
                 btnText.style.display = 'inline';
                 btnLoader.style.display = 'none';
             };
             
             img.onerror = () => {
-                throw new Error('Failed to generate image');
+                // Error: Failed to load image (network issue or bad prompt)
+                throw new Error('Failed to load image. Please try a different prompt or check your internet.');
             };
             
-            // Load image
+            // Start loading the image source
             img.src = imageUrl;
             
         } catch (error) {
-            console.error('Error generating image:', error);
-            imageContainer.innerHTML = `
-                <p style="color: #dc3545;">Failed to generate image. Please try again.</p>
-            `;
+            console.error(error);
+            imageContainer.innerHTML = `<p style="color: #dc3545;">Error: ${error.message}</p>`;
             downloadBtn.style.display = 'none';
             
-            // Reset button state
+            // Reset Button
             generateBtn.disabled = false;
             btnText.style.display = 'inline';
             btnLoader.style.display = 'none';
@@ -83,7 +102,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const img = imageContainer.querySelector('img');
         if (!img) return;
 
-        // Create canvas to convert image to blob
+        // We use a Canvas to save the image
+        // This bypasses some browser security issues with downloading from other domains
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         canvas.width = img.naturalWidth;
@@ -91,12 +111,14 @@ document.addEventListener('DOMContentLoaded', () => {
         
         ctx.drawImage(img, 0, 0);
         
-        // Convert to blob and download
+        // Convert to blob and trigger download
         canvas.toBlob((blob) => {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `ai-image-${Date.now()}.png`;
+            // Create filename based on the model used and timestamp
+            const modelName = document.getElementById('pollinationsModel').value;
+            a.download = `${modelName}-art-${Date.now()}.png`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
